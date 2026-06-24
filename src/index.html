@@ -14,6 +14,7 @@
             --accent-color: #4f46e5;
             --accent-hover: #4338ca;
             --danger-color: #ef4444;
+            --error-color: #fee2e2;
         }
 
         [data-theme="dark"] {
@@ -24,6 +25,7 @@
             --border-color: #334155;
             --accent-color: #6366f1;
             --accent-hover: #818cf8;
+            --error-color: #7f1d1d;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -47,34 +49,27 @@
             gap: 1.5rem;
         }
 
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
+        header { display: flex; justify-content: space-between; align-items: center; }
         h1 { font-size: 1.5rem; font-weight: 600; }
 
-        button, select, input {
-            padding: 0.5rem 1rem;
+        button, input {
+            padding: 0.6rem 1rem;
             border: 1px solid var(--border-color);
             border-radius: 6px;
             background: var(--surface-color);
             color: var(--text-primary);
             font-size: 0.9rem;
-            cursor: pointer;
             outline: none;
         }
+        
+        input { width: 100%; transition: border-color 0.2s; }
+        input:focus { border-color: var(--accent-color); }
+        input.error { border-color: var(--danger-color); background-color: var(--error-color); }
 
-        button.primary {
-            background-color: var(--accent-color);
-            color: white;
-            border: none;
-            font-weight: 500;
-        }
-
+        button { cursor: pointer; font-weight: 500; }
+        button.primary { background-color: var(--accent-color); color: white; border: none; }
         button.primary:hover { background-color: var(--accent-hover); }
-        button.icon-btn { padding: 0.4rem 0.6rem; color: var(--danger-color); font-weight: bold;}
+        button.icon-btn { padding: 0.4rem 0.6rem; color: var(--danger-color); font-weight: bold; }
 
         .card {
             background-color: var(--surface-color);
@@ -85,8 +80,11 @@
         }
 
         .main-clock { text-align: center; margin-bottom: 1rem; }
-        .main-time { font-size: 3.5rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 2px;}
-        .main-date { font-size: 1.2rem; color: var(--text-secondary); margin-top: 0.2rem; }
+        .main-time { font-size: 3.5rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 2px; margin: 1rem 0 0.2rem; }
+        .main-date { font-size: 1.2rem; color: var(--text-secondary); margin-bottom: 1rem; }
+        
+        .input-group { display: flex; gap: 0.5rem; }
+        .input-group input { flex: 1; }
 
         .tz-list { list-style: none; display: flex; flex-direction: column; gap: 0.8rem; margin-top: 1rem; }
         .tz-item {
@@ -99,15 +97,12 @@
         }
         
         .tz-info { display: flex; flex-direction: column; }
-        .tz-name { font-weight: 500; }
-        .tz-offset { font-size: 0.8rem; color: var(--text-secondary); }
+        .tz-name { font-weight: 600; }
+        .tz-raw { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; }
         
         .tz-clock { text-align: right; }
         .tz-clock-time { font-size: 1.2rem; font-weight: 600; font-variant-numeric: tabular-nums;}
         .tz-clock-date { font-size: 0.8rem; color: var(--text-secondary); }
-
-        .controls { display: flex; gap: 0.5rem; margin-top: 1rem; }
-        .controls select { flex: 1; }
 
         .share-section {
             display: flex;
@@ -140,29 +135,34 @@
     <div id="shared-banner" class="banner" style="display: none;">
         Viewing a Shared Static Time
         <br>
-        <button onclick="window.location.href=window.location.pathname" style="margin-top: 10px; font-size: 0.8rem;">Return to Live Clock</button>
+        <button onclick="window.location.href=window.location.pathname" style="margin-top: 10px; font-size: 0.8rem; background: rgba(255,255,255,0.2); color: white; border: 1px solid white;">Return to Live Clock</button>
     </div>
 
     <div class="card">
         <div class="main-clock">
-            <select id="main-tz-select"></select>
+            <div class="input-group">
+                <input type="text" id="main-tz-input" list="tz-options" placeholder="Set Main Zone (e.g. IST, +05:30)">
+                <button class="primary" id="set-main-btn">Set</button>
+            </div>
             <div class="main-time" id="main-time">00:00:00</div>
             <div class="main-date" id="main-date">YYYY-MM-DD</div>
         </div>
 
-        <div class="controls">
-            <select id="add-tz-select"></select>
+        <div class="input-group" id="add-controls">
+            <input type="text" id="add-tz-input" list="tz-options" placeholder="Add Zone (e.g. EST, +09:00, Asia/Tokyo)">
             <button class="primary" id="add-tz-btn">Add Zone</button>
         </div>
+
+        <datalist id="tz-options"></datalist>
 
         <ul class="tz-list" id="tz-list">
             </ul>
 
         <div class="share-section" id="share-ui">
             <h3 style="font-size: 1rem;">Generate Shareable Link</h3>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <div class="input-group" style="align-items: center;">
                 <input type="datetime-local" id="custom-time-input">
-                <button class="primary" id="generate-link-btn" style="flex: 1;">Copy Link</button>
+                <button class="primary" id="generate-link-btn" style="flex: 0.5;">Copy Link</button>
             </div>
             <input type="text" id="share-url-output" readonly placeholder="URL will appear here..." onclick="this.select()">
         </div>
@@ -170,46 +170,65 @@
 </div>
 
 <script>
-    // App State
+    // --- Configuration & Mapping ---
+    const TZ_SHORT_MAP = {
+        'IST': 'Asia/Kolkata', 'EST': 'America/New_York', 'EDT': 'America/New_York',
+        'CST': 'America/Chicago', 'CDT': 'America/Chicago', 'PST': 'America/Los_Angeles',
+        'PDT': 'America/Los_Angeles', 'GMT': 'Europe/London', 'BST': 'Europe/London',
+        'CET': 'Europe/Paris', 'CEST': 'Europe/Paris', 'JST': 'Asia/Tokyo',
+        'AEST': 'Australia/Sydney', 'AEDT': 'Australia/Sydney', 'UTC': 'UTC'
+    };
+
+    // --- App State ---
     const state = {
         localTz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        mainTz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        comparedZones: [],
-        sharedEpoch: null, // If set via URL, clock stops and shows this time
+        mainTz: { display: 'Local', resolved: Intl.DateTimeFormat().resolvedOptions().timeZone },
+        comparedZones: [], // Array of objects: { display: string, resolved: string }
+        sharedEpoch: null,
         ticker: null
     };
 
-    // DOM Elements
+    // --- DOM Elements ---
     const els = {
         themeBtn: document.getElementById('theme-btn'),
-        mainTzSelect: document.getElementById('main-tz-select'),
+        mainTzInput: document.getElementById('main-tz-input'),
+        setMainBtn: document.getElementById('set-main-btn'),
         mainTime: document.getElementById('main-time'),
         mainDate: document.getElementById('main-date'),
-        addTzSelect: document.getElementById('add-tz-select'),
+        addTzInput: document.getElementById('add-tz-input'),
         addTzBtn: document.getElementById('add-tz-btn'),
+        tzOptions: document.getElementById('tz-options'),
         tzList: document.getElementById('tz-list'),
         customTimeInput: document.getElementById('custom-time-input'),
         generateLinkBtn: document.getElementById('generate-link-btn'),
         shareUrlOutput: document.getElementById('share-url-output'),
         sharedBanner: document.getElementById('shared-banner'),
-        shareUi: document.getElementById('share-ui')
+        shareUi: document.getElementById('share-ui'),
+        addControls: document.getElementById('add-controls')
     };
 
-    // Initialize Application
+    // --- Initialization ---
     function init() {
         setupTheme();
-        populateTimezones();
-        parseUrlParams();
+        populateDatalist();
+        
+        els.mainTzInput.value = state.localTz;
 
         // Event Listeners
-        els.mainTzSelect.addEventListener('change', (e) => { state.mainTz = e.target.value; updateClocks(); });
+        els.setMainBtn.addEventListener('click', setMainTimezone);
         els.addTzBtn.addEventListener('click', addTimezone);
         els.generateLinkBtn.addEventListener('click', generateShareLink);
+
+        // Allow 'Enter' key to trigger adds
+        els.addTzInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') addTimezone(); });
+        els.mainTzInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') setMainTimezone(); });
 
         // Set default datetime picker to current local time
         const now = new Date();
         now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
         els.customTimeInput.value = now.toISOString().slice(0, 16);
+
+        parseUrlParams();
 
         if (!state.sharedEpoch) {
             state.ticker = setInterval(updateClocks, 1000);
@@ -217,7 +236,76 @@
         updateClocks();
     }
 
-    // Theme Management
+    // --- Core Logic ---
+
+    // Resolves input (IST, +05:30, Asia/Kolkata) to usable string
+    function resolveTimezoneInput(input) {
+        if (!input) return null;
+        const trimmed = input.trim();
+        const upper = trimmed.toUpperCase();
+
+        // 1. Short Code Dictionary
+        if (TZ_SHORT_MAP[upper]) return TZ_SHORT_MAP[upper];
+
+        // 2. Fixed Offset Regex (+05:30, -04:00)
+        if (/^([+-])(\d{1,2}):(\d{2})$/.test(trimmed)) return trimmed;
+
+        // 3. IANA Native Validation
+        try {
+            Intl.DateTimeFormat(undefined, { timeZone: trimmed });
+            return trimmed; // Valid IANA
+        } catch (e) {
+            return null; // Invalid
+        }
+    }
+
+    // Handles logic for both IANA zones and fixed offsets
+    function formatDateTime(timestamp, resolvedTz) {
+        const offsetMatch = resolvedTz.match(/^([+-])(\d{1,2}):(\d{2})$/);
+        
+        if (offsetMatch) {
+            // Manual calculation for fixed offsets
+            const sign = offsetMatch[1] === '+' ? 1 : -1;
+            const hours = parseInt(offsetMatch[2], 10);
+            const mins = parseInt(offsetMatch[3], 10);
+            const offsetMs = sign * ((hours * 60) + mins) * 60 * 1000;
+
+            const utcDate = new Date(timestamp);
+            const localAdjusted = new Date(utcDate.getTime() + offsetMs);
+
+            // Format as UTC to prevent browser interference
+            const formatter = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'UTC',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            });
+            const parts = formatter.format(localAdjusted).split(', ');
+            return { date: parts[0], time: parts[1] };
+        } else {
+            // Standard IANA handling (includes DST automation)
+            const formatter = new Intl.DateTimeFormat('en-CA', {
+                timeZone: resolvedTz,
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            });
+            const parts = formatter.format(new Date(timestamp)).split(', ');
+            return { date: parts[0], time: parts[1] };
+        }
+    }
+
+    // --- UI Interactions ---
+
+    function populateDatalist() {
+        const timezones = Intl.supportedValuesOf('timeZone');
+        const frag = document.createDocumentFragment();
+        timezones.forEach(tz => {
+            const opt = document.createElement('option');
+            opt.value = tz;
+            frag.appendChild(opt);
+        });
+        els.tzOptions.appendChild(frag);
+    }
+
     function setupTheme() {
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         const savedTheme = localStorage.getItem('theme');
@@ -233,53 +321,67 @@
         });
     }
 
-    // Timezone Data Management
-    function populateTimezones() {
-        const timezones = Intl.supportedValuesOf('timeZone');
-        let optionsHtml = '';
+    function setMainTimezone() {
+        const rawInput = els.mainTzInput.value;
+        const resolved = resolveTimezoneInput(rawInput);
         
-        timezones.forEach(tz => {
-            const selected = tz === state.localTz ? 'selected' : '';
-            optionsHtml += `<option value="${tz}" ${selected}>${tz.replace('_', ' ')}</option>`;
-        });
-
-        els.mainTzSelect.innerHTML = optionsHtml;
-        els.addTzSelect.innerHTML = optionsHtml;
+        if (resolved) {
+            state.mainTz = { display: rawInput, resolved: resolved };
+            els.mainTzInput.classList.remove('error');
+            updateClocks();
+        } else {
+            els.mainTzInput.classList.add('error');
+            setTimeout(() => els.mainTzInput.classList.remove('error'), 1000);
+        }
     }
 
-    // Core Time Formatting logic using 'en-CA' because it outputs standard YYYY-MM-DD
-    function formatDateTime(timestamp, tz) {
-        const dateObj = new Date(timestamp);
-        const formatter = new Intl.DateTimeFormat('en-CA', {
-            timeZone: tz,
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit',
-            hour12: false
-        });
-        
-        // en-CA format: "YYYY-MM-DD, HH:mm:ss"
-        const parts = formatter.format(dateObj).split(', ');
-        return { date: parts[0], time: parts[1] };
+    function addTimezone() {
+        const rawInput = els.addTzInput.value;
+        const resolved = resolveTimezoneInput(rawInput);
+
+        if (resolved) {
+            // Prevent exact duplicates
+            const exists = state.comparedZones.some(z => z.resolved === resolved);
+            if (!exists) {
+                state.comparedZones.push({ display: rawInput, resolved: resolved });
+                els.addTzInput.value = '';
+                els.addTzInput.classList.remove('error');
+                updateClocks();
+            }
+        } else {
+            els.addTzInput.classList.add('error');
+            setTimeout(() => els.addTzInput.classList.remove('error'), 1000);
+        }
     }
 
-    // Update UI Clocks
+    window.removeTimezone = function(index) {
+        state.comparedZones.splice(index, 1);
+        updateClocks();
+    }
+
     function updateClocks() {
         const targetTime = state.sharedEpoch ? parseInt(state.sharedEpoch) * 1000 : Date.now();
         
         // Update Main Clock
-        const mainFormatted = formatDateTime(targetTime, state.mainTz);
+        const mainFormatted = formatDateTime(targetTime, state.mainTz.resolved);
         els.mainTime.textContent = mainFormatted.time;
         els.mainDate.textContent = mainFormatted.date;
 
         // Update Compared Clocks
         els.tzList.innerHTML = '';
-        state.comparedZones.forEach((tz, index) => {
-            const formatted = formatDateTime(targetTime, tz);
+        state.comparedZones.forEach((zoneObj, index) => {
+            const formatted = formatDateTime(targetTime, zoneObj.resolved);
+            
+            // If display is different from resolved (e.g. IST -> Asia/Kolkata), show both
+            const subLabel = zoneObj.display.toUpperCase() !== zoneObj.resolved.toUpperCase() 
+                ? zoneObj.resolved : '';
+
             const li = document.createElement('li');
             li.className = 'tz-item';
             li.innerHTML = `
                 <div class="tz-info">
-                    <span class="tz-name">${tz.replace('_', ' ')}</span>
+                    <span class="tz-name">${zoneObj.display}</span>
+                    ${subLabel ? `<span class="tz-raw">${subLabel}</span>` : ''}
                 </div>
                 <div class="tz-clock">
                     <div class="tz-clock-time">${formatted.time}</div>
@@ -291,37 +393,23 @@
         });
     }
 
-    function addTimezone() {
-        const tz = els.addTzSelect.value;
-        if (!state.comparedZones.includes(tz)) {
-            state.comparedZones.push(tz);
-            updateClocks();
-        }
-    }
+    // --- URL Sharing & Parsing ---
 
-    window.removeTimezone = function(index) {
-        state.comparedZones.splice(index, 1);
-        updateClocks();
-    }
-
-    // URL Sharing & Parsing
     function generateShareLink() {
-        // Get user selected time and treat it as local to their browser, then convert to absolute UTC epoch
         const localDateStr = els.customTimeInput.value;
         if (!localDateStr) return;
         
         const epochSeconds = Math.floor(new Date(localDateStr).getTime() / 1000);
-        
         const url = new URL(window.location.href);
         url.searchParams.set('time', epochSeconds);
         
-        const allZones = [state.mainTz, ...state.comparedZones];
-        url.searchParams.set('zones', allZones.join(','));
+        // Encode configurations format: display|resolved,display|resolved
+        const allZones = [state.mainTz, ...state.comparedZones].map(z => `${z.display}|${z.resolved}`);
+        url.searchParams.set('zones', encodeURIComponent(allZones.join(',')));
 
         els.shareUrlOutput.value = url.toString();
-        
-        // Copy to clipboard
         navigator.clipboard.writeText(url.toString());
+        
         els.generateLinkBtn.textContent = 'Copied!';
         setTimeout(() => els.generateLinkBtn.textContent = 'Copy Link', 2000);
     }
@@ -333,20 +421,29 @@
 
         if (timeParam && zonesParam) {
             state.sharedEpoch = timeParam;
-            const zones = zonesParam.split(',');
             
-            if (zones.length > 0) {
-                state.mainTz = zones[0];
-                els.mainTzSelect.value = state.mainTz;
-                state.comparedZones = zones.slice(1);
+            try {
+                const zones = decodeURIComponent(zonesParam).split(',');
+                if (zones.length > 0) {
+                    const mainParts = zones[0].split('|');
+                    state.mainTz = { display: mainParts[0], resolved: mainParts[1] };
+                    els.mainTzInput.value = state.mainTz.display;
+                    
+                    state.comparedZones = zones.slice(1).map(z => {
+                        const parts = z.split('|');
+                        return { display: parts[0], resolved: parts[1] };
+                    });
+                }
+            } catch (e) {
+                console.error("Failed to parse zones from URL");
             }
             
-            // Adjust UI for static viewing
+            // Adjust UI for static viewing mode
             els.sharedBanner.style.display = 'block';
             els.shareUi.style.display = 'none';
-            els.addTzBtn.disabled = true;
-            els.addTzSelect.disabled = true;
-            els.mainTzSelect.disabled = true;
+            els.addControls.style.display = 'none';
+            els.setMainBtn.style.display = 'none';
+            els.mainTzInput.disabled = true;
         }
     }
 
